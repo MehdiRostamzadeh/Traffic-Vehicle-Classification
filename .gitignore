@@ -1,22 +1,14 @@
-# Python
 __pycache__/
-*.pyc
-
-# Virtual environment
-.venv/
-venv/
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Dataset
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
 dataset/
-
-# Trained models
-models/
-
-# Environment
-.env
-
-#Notebook
 Notebook/
+checkpoints/
+reports/
+*.ipynb_checkpoints
+.env
