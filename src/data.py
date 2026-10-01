@@ -1,85 +1,79 @@
 from pathlib import Path
-from sklearn.model_selection import train_test_split
-import shutil
 
 
 # =========================
 # Configuration
 # =========================
 
-DATASET_DIR = Path("../dataset/final")
+DATASET_DIR = Path("dataset/final")
 
 TRAIN_DIR = DATASET_DIR / "train"
-VAL_DIR = DATASET_DIR / "val"
-
-VAL_SIZE = 0.2
-RANDOM_STATE = 42
+TEST_DIR = DATASET_DIR / "test"
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 
 # =========================
-# Create Validation Split
+# Dataset Summary
 # =========================
 
-def create_validation_split():
+def count_images(directory):
+    """Count images inside each class folder."""
 
-    print("=" * 50)
-    print("TRAIN / VALIDATION SPLIT")
-    print("=" * 50)
+    total = 0
+    class_counts = {}
 
-    # Create validation directory
-    VAL_DIR.mkdir(parents=True, exist_ok=True)
+    for class_dir in sorted(directory.iterdir()):
 
-    total_train = 0
-    total_val = 0
-
-    # Get classes
-    classes = [folder for folder in TRAIN_DIR.iterdir() if folder.is_dir()]
-
-    for class_dir in classes:
-
-        class_name = class_dir.name
-
-        # Get images
-        images = [
-            file
-            for file in class_dir.iterdir()
-            if file.is_file() and file.suffix.lower() in IMAGE_EXTENSIONS
-        ]
-
-        if not images:
+        if not class_dir.is_dir():
             continue
 
-        # Split images
-        train_images, val_images = train_test_split(
-            images,
-            test_size=VAL_SIZE,
-            random_state=RANDOM_STATE
+        count = sum(
+            1
+            for file in class_dir.iterdir()
+            if file.is_file()
+            and file.suffix.lower() in IMAGE_EXTENSIONS
         )
 
-        # Create validation class directory
-        val_class_dir = VAL_DIR / class_name
-        val_class_dir.mkdir(parents=True, exist_ok=True)
+        class_counts[class_dir.name] = count
+        total += count
 
-        # Move validation images
-        for image in val_images:
-            shutil.move(str(image), str(val_class_dir / image.name))
+    return class_counts, total
 
-        total_train += len(train_images)
-        total_val += len(val_images)
 
-        print(
-            f"{class_name:12} | "
-            f"Train: {len(train_images):4} | "
-            f"Val: {len(val_images):4}"
-        )
+# =========================
+# Main
+# =========================
 
-    print("-" * 50)
-    print(f"Total Train: {total_train}")
-    print(f"Total Val  : {total_val}")
-    print("=" * 50)
+def main():
+
+    print("=" * 60)
+    print("TRAFFIC VEHICLE CLASSIFICATION - DATASET SUMMARY")
+    print("=" * 60)
+
+    train_counts, train_total = count_images(TRAIN_DIR)
+    test_counts, test_total = count_images(TEST_DIR)
+
+    print("\nTRAIN DATASET")
+    print("-" * 60)
+
+    for class_name, count in train_counts.items():
+        print(f"{class_name:12} : {count}")
+
+    print(f"\nTotal Train : {train_total}")
+
+    print("\nTEST DATASET")
+    print("-" * 60)
+
+    for class_name, count in test_counts.items():
+        print(f"{class_name:12} : {count}")
+
+    print(f"\nTotal Test  : {test_total}")
+
+    print("\n" + "=" * 60)
+    print("DATASET SUMMARY COMPLETED")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
-    create_validation_split()
+    main()
