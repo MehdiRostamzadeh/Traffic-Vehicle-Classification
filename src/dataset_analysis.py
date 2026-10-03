@@ -125,7 +125,7 @@ for split in splits:
 import hashlib
 
 
-def calculate_hash(file_path):
+def get_hash(file_path):
 
     hash_md5 = hashlib.md5()
 
@@ -137,114 +137,175 @@ def calculate_hash(file_path):
     return hash_md5.hexdigest()
 
 
-def find_duplicates(directory):
+def remove_duplicates(train_path, test_path, unclean_path):
 
-    hashes = {}
-    duplicates = []
+    # Hashes from train and test
+    reference_hashes = set()
 
-    for file in directory.rglob("*"):
+    for folder in [train_path, test_path]:
 
-        if not file.is_file():
+        if not folder.exists():
             continue
 
-        if file.suffix.lower() not in IMAGE_EXTENSIONS:
-            continue
-        #Hash فقط موقتاً در RAM برنامه ساخته شد و بعد از تمام شدن برنامه از بین رفت.
-        file_hash = calculate_hash(file)
+        for file in folder.rglob("*"):
 
-        if file_hash in hashes:
-            duplicates.append((file, hashes[file_hash]))
-        else:
-            hashes[file_hash] = file
+            if file.is_file() and file.suffix.lower() in IMAGE_EXTENSIONS:
+                reference_hashes.add(get_hash(file))
 
-    return duplicates
+    # Find and remove duplicates from unclean
+    removed = 0
 
+    if unclean_path.exists():
 
-# _______________ Run Duplicate Detection _______________
+        for file in unclean_path.rglob("*"):
 
-print("\n\n" + "=" * 50)
-print("DUPLICATE DETECTION")
-print("=" * 50)
+            if file.is_file() and file.suffix.lower() in IMAGE_EXTENSIONS:
 
-for split in splits:
+                if get_hash(file) in reference_hashes:
 
-    path = DATASET_DIR / split
+                    file.unlink()
+                    removed += 1
 
-    if not path.exists():
-        continue
-
-    duplicates = find_duplicates(path)
-
-    print(f"{split:<15} | Duplicates: {len(duplicates)}")
-
-    for duplicate, original in duplicates[:5]:
-
-        print(f"  {duplicate.name} == {original.name}")
-        
-# _______________ Cross-Split Duplicate Detection _______________
-
-def find_cross_duplicates(directory_1, directory_2):
-
-    hashes_1 = {}
-
-    for file in directory_1.rglob("*"):
-
-        if not file.is_file():
-            continue
-
-        if file.suffix.lower() not in IMAGE_EXTENSIONS:
-            continue
-
-        file_hash = calculate_hash(file)
-        hashes_1[file_hash] = file
-
-    duplicates = []
-
-    for file in directory_2.rglob("*"):
-
-        if not file.is_file():
-            continue
-
-        if file.suffix.lower() not in IMAGE_EXTENSIONS:
-            continue
-
-        file_hash = calculate_hash(file)
-
-        if file_hash in hashes_1:
-            duplicates.append(
-                (file, hashes_1[file_hash])
-            )
-
-    return duplicates
+    return removed
 
 
-# _______________ Run Cross-Split Duplicate Detection _______________
+# _______________ Run Duplicate Cleaning _______________
 
-print("\n\n" + "=" * 50)
-print("CROSS-SPLIT DUPLICATE DETECTION")
+print("\n" + "=" * 50)
+print("DUPLICATE CLEANING")
 print("=" * 50)
 
 
-comparisons = [
-    ("new/train", "new/unclean"),
-    ("old/train", "old/test"),
-    ("old/train", "old/unclean"),
-    ("old/test", "old/unclean"),
+old_removed = remove_duplicates(
+    DATASET_DIR / "old/train",
+    DATASET_DIR / "old/test",
+    DATASET_DIR / "old/unclean"
+)
+
+
+new_removed = remove_duplicates(
+    DATASET_DIR / "new/train",
+    DATASET_DIR / "new/test",
+    DATASET_DIR / "new/unclean"
+)
+
+
+print(f"Old duplicates removed: {old_removed}")
+print(f"New duplicates removed: {new_removed}")
+
+# _______________ Merge Final Dataset _______________
+
+import shutil
+
+
+sources_train = [
+    DATASET_DIR / "old/train",
+    DATASET_DIR / "new/train",
+    DATASET_DIR / "old/unclean",
+    DATASET_DIR / "new/unclean",
+]
+
+source_test = DATASET_DIR / "old/test"
+
+final_train = DATASET_DIR / "final/train"
+final_test = DATASET_DIR / "final/test"
+
+
+classes = [
+    "ambulance",
+    "autobus",
+    "kamyun",
+    "kamyunet",
+    "minibus",
+    "savari",
+    "taxi",
+    "vanet",
 ]
 
 
-for split_1, split_2 in comparisons:
+# _______________ Create Final Folders _______________
 
-    path_1 = DATASET_DIR / split_1
-    path_2 = DATASET_DIR / split_2
+for class_name in classes:
 
-    duplicates = find_cross_duplicates(path_1, path_2)
-
-    print(
-        f"{split_1} ↔ {split_2}"
-        f" | Duplicates: {len(duplicates)}"
+    (final_train / class_name).mkdir(
+        parents=True,
+        exist_ok=True
     )
 
-    for duplicate, original in duplicates[:5]:
+    (final_test / class_name).mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
-        print(f"  {duplicate} == {original}")
+
+# _______________ Merge Train Data _______________
+
+copied_train = 0
+
+for source in sources_train:
+
+    for class_name in classes:
+
+        source_class = source / class_name
+
+        if not source_class.exists():
+            continue
+
+        for file in source_class.iterdir():
+
+            if not file.is_file():
+                continue
+
+            destination = final_train / class_name / file.name
+
+            # Prevent overwriting
+            if destination.exists():
+
+                stem = file.stem
+                suffix = file.suffix
+
+                counter = 1
+
+                while destination.exists():
+
+                    new_name = f"{stem}_{counter}{suffix}"
+                    destination = final_train / class_name / new_name
+
+                    counter += 1
+
+            shutil.copy2(file, destination)
+
+            copied_train += 1
+
+
+# _______________ Copy Test Data _______________
+
+copied_test = 0
+
+for class_name in classes:
+
+    source_class = source_test / class_name
+
+    if not source_class.exists():
+        continue
+
+    for file in source_class.iterdir():
+
+        if not file.is_file():
+            continue
+
+        destination = final_test / class_name / file.name
+
+        shutil.copy2(file, destination)
+
+        copied_test += 1
+
+
+# _______________ Merge Summary _______________
+
+print("\n" + "=" * 50)
+print("FINAL DATASET MERGE")
+print("=" * 50)
+
+print(f"Train images copied: {copied_train}")
+print(f"Test images copied : {copied_test}")
