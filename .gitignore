@@ -9,6 +9,5 @@ build/
 dataset/
 Notebook/
 checkpoints/
-reports/
 *.ipynb_checkpoints
 .env
